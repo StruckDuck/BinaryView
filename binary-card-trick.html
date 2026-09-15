@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Binary Card Trick — Practice</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#14120F;
+    --paper:#EAE1C8;
+    --paper-shadow: rgba(0,0,0,.5);
+    --charcoal:#2A2620;
+    --oxblood:#7A2E27;
+    --sage:#55624F;
+    --brass:#A6875A;
+    --brass-dim: rgba(166,135,90,.35);
+    --focus: #C9A96E;
+  }
+  :root:not([data-theme="light"]){
+    --ink:#14120F;
+    --paper:#EAE1C8;
+    --charcoal:#2A2620;
+  }
+  :root[data-theme="dark"]{
+    --ink:#14120F;
+    --paper:#EAE1C8;
+    --charcoal:#2A2620;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --ink:#14120F;
+      --paper:#EAE1C8;
+      --charcoal:#2A2620;
+    }
+  }
+
+  *{ box-sizing: border-box; }
+
+  html, body{
+    margin:0;
+    padding:0;
+    height:100%;
+    background: var(--ink);
+    color: var(--paper);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    overscroll-behavior: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    min-height:100vh;
+    overflow:hidden;
+    touch-action: pan-y;
+  }
+
+  .app{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap: 18px;
+    width: 100%;
+    padding: 24px 16px;
+  }
+
+  .lede{
+    font-family:'Fraunces', Georgia, serif;
+    font-optical-sizing: auto;
+    font-weight: 500;
+    font-size: clamp(0.95rem, 2.6vw, 1.15rem);
+    color: var(--brass);
+    letter-spacing: .01em;
+    text-align:center;
+    min-height: 1.4em;
+    opacity: .9;
+  }
+
+  .stack{
+    position:relative;
+    width: min(84vw, 300px);
+    aspect-ratio: 2.5 / 3.5;
+    container-type: inline-size;
+  }
+
+  .peek{
+    position:absolute;
+    inset:0;
+    border-radius: 14px;
+    background: var(--charcoal);
+    border: 1px solid var(--brass-dim);
+    box-shadow: 0 10px 30px var(--paper-shadow);
+    transition: opacity .35s ease, transform .35s ease;
+  }
+  .peek-back{
+    background-image:
+      repeating-linear-gradient(135deg, var(--brass-dim) 0px, var(--brass-dim) 1px, transparent 1px, transparent 14px);
+    background-color: #201C16;
+  }
+  .peek1{ transform: translateY(10px) scale(.965); z-index:1; opacity:.85; }
+  .peek2{ transform: translateY(20px) scale(.93); z-index:0; opacity:.6; }
+  .peek.hide{ opacity:0; transform: translateY(20px) scale(.9); }
+
+  .card{
+    position:absolute;
+    inset:0;
+    z-index:2;
+    border-radius:14px;
+    background: var(--paper);
+    border: 1px solid rgba(42,38,32,.25);
+    box-shadow: 0 18px 40px var(--paper-shadow);
+    color: var(--charcoal);
+    cursor: grab;
+    will-change: transform;
+    background-image:
+      radial-gradient(ellipse at top left, rgba(255,255,255,.25), transparent 60%),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+  }
+  .card:active{ cursor: grabbing; }
+  .card.dragging{ transition:none; }
+  .card.snapping{ transition: transform .32s cubic-bezier(.2,.7,.3,1); }
+  .card.leaving{ transition: transform .38s cubic-bezier(.4,0,.6,1), opacity .38s ease; }
+  .card.entering{
+    animation: enter .32s cubic-bezier(.2,.7,.3,1);
+  }
+  @keyframes enter{
+    from{ transform: translateX(28px) rotate(1.2deg); opacity:0; }
+    to{ transform: translateX(0) rotate(0); opacity:1; }
+  }
+
+  .card-inner{
+    position:absolute;
+    inset: 7% 8%;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    text-align:center;
+    gap: 10px;
+  }
+
+  /* intro card */
+  .intro-title{
+    font-family:'Fraunces', Georgia, serif;
+    font-weight: 600;
+    font-size: 8.5cqw;
+    line-height:1.15;
+  }
+  .intro-sub{
+    font-size: 3.6cqw;
+    color: var(--charcoal);
+    opacity:.72;
+    max-width: 22em;
+    line-height:1.5;
+  }
+  .think-btn{
+    margin-top: 8%;
+    font-family:'Inter', sans-serif;
+    font-weight:600;
+    font-size: 4cqw;
+    background: var(--charcoal);
+    color: var(--paper);
+    border: none;
+    border-radius: 999px;
+    padding: 4.2cqw 7cqw;
+    cursor:pointer;
+    letter-spacing:.02em;
+    transition: transform .15s ease, background .2s ease;
+  }
+  .think-btn:hover{ transform: translateY(-1px); }
+  .think-btn:active{ transform: translateY(0px) scale(.97); }
+  .think-btn:disabled{ opacity:.55; cursor:default; }
+  .think-btn:focus-visible, .action-btn:focus-visible, .give-up:focus-visible, .restart:focus-visible, .guess-input:focus-visible{
+    outline: 3px solid var(--focus);
+    outline-offset: 2px;
+  }
+
+  .locked{
+    font-family:'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: 4.4cqw;
+    color: var(--oxblood);
+    opacity:0;
+    transition: opacity .2s ease;
+  }
+  .locked.show{ opacity:1; }
+
+  /* number cards */
+  .card-eyebrow{
+    position:absolute;
+    top: 6%;
+    left:0; right:0;
+    text-align:center;
+    font-size: 3cqw;
+    color: var(--charcoal);
+    opacity:.5;
+    letter-spacing: .04em;
+  }
+  .grid{
+    display:grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 1.6cqw 1.2cqw;
+    width:100%;
+  }
+  .grid span{
+    font-family:'Fraunces', Georgia, serif;
+    font-weight: 500;
+    font-size: 6.2cqw;
+    line-height:1;
+    text-align:center;
+  }
+  .answer{
+    margin-top: 6%;
+    font-family:'Fraunces', Georgia, serif;
+    font-weight:600;
+    font-size: 9cqw;
+    opacity:0;
+    transform: translateY(6px) scale(.9);
+    transition: opacity .3s ease, transform .3s ease;
+  }
+  .answer.show{ opacity:1; transform: translateY(0) scale(1); }
+  .answer.yes{ color: var(--oxblood); }
+  .answer.no{ color: var(--sage); }
+  .waiting-dot{
+    margin-top:6%;
+    width: 2.2cqw;
+    height: 2.2cqw;
+    border-radius:50%;
+    background: var(--charcoal);
+    opacity:.25;
+    animation: pulse 1s ease-in-out infinite;
+  }
+  @keyframes pulse{
+    0%,100%{ opacity:.15; transform:scale(1); }
+    50%{ opacity:.5; transform:scale(1.3); }
+  }
+
+  /* guess card */
+  .guess-title{
+    font-family:'Fraunces', Georgia, serif;
+    font-weight:600;
+    font-size: 6.5cqw;
+  }
+  .guess-form{
+    display:flex;
+    gap: 2.4cqw;
+    margin-top: 3%;
+  }
+  .guess-input{
+    font-family:'Fraunces', Georgia, serif;
+    font-size: 6cqw;
+    width: 14cqw;
+    min-width: 64px;
+    text-align:center;
+    border: none;
+    border-bottom: 2px solid var(--charcoal);
+    background: transparent;
+    color: var(--charcoal);
+    padding: 2%;
+    -moz-appearance: textfield;
+  }
+  .guess-input::-webkit-outer-spin-button,
+  .guess-input::-webkit-inner-spin-button{ -webkit-appearance:none; margin:0; }
+  .action-btn{
+    font-family:'Inter', sans-serif;
+    font-weight:600;
+    font-size: 3.8cqw;
+    background: var(--charcoal);
+    color: var(--paper);
+    border:none;
+    border-radius: 999px;
+    padding: 3.2cqw 6cqw;
+    cursor:pointer;
+  }
+  .feedback{
+    margin-top: 5%;
+    font-size: 4cqw;
+    min-height: 1.6em;
+  }
+  .feedback.correct{ color: var(--oxblood); font-family:'Fraunces', Georgia, serif; font-weight:600; font-size:6cqw; }
+  .feedback.wrong{ color: var(--charcoal); opacity:.75; }
+  .give-up{
+    margin-top: 4%;
+    background:none;
+    border:none;
+    color: var(--charcoal);
+    opacity:.5;
+    font-size: 3cqw;
+    text-decoration: underline;
+    cursor:pointer;
+    display:none;
+  }
+  .give-up.show{ display:inline-block; }
+
+  .hint{
+    font-size: .8rem;
+    color: var(--paper);
+    opacity:.4;
+    text-align:center;
+    min-height: 1.2em;
+    max-width: 20em;
+  }
+
+  .dots{
+    display:flex;
+    gap: 7px;
+  }
+  .dots span{
+    width:7px; height:7px; border-radius:50%;
+    background: var(--brass-dim);
+    transition: background .25s ease, transform .25s ease;
+  }
+  .dots span.on{ background: var(--brass); transform: scale(1.15); }
+
+  .restart{
+    position:fixed;
+    top: 18px;
+    right: 18px;
+    z-index: 50;
+    background: transparent;
+    border: 1px solid var(--brass-dim);
+    color: var(--paper);
+    opacity:.7;
+    font-family:'Inter', sans-serif;
+    font-size: .78rem;
+    font-weight:500;
+    padding: 8px 14px;
+    border-radius: 999px;
+    cursor:pointer;
+    transition: opacity .2s ease, border-color .2s ease;
+  }
+  .restart:hover{ opacity:1; border-color: var(--brass); }
+
+  @media (prefers-reduced-motion: reduce){
+    .card, .peek, .answer, .locked{ transition:none !important; animation:none !important; }
+  }
+</style>
+</head>
+<body>
+
+<button class="restart" id="restartBtn" aria-label="Restart the trick">Restart</button>
+
+<div class="app">
+  <div class="lede" id="lede" aria-live="polite"></div>
+
+  <div class="stack" id="stack">
+    <div class="peek peek-back peek2" id="peek2"></div>
+    <div class="peek peek-back peek1" id="peek1"></div>
+    <div class="card" id="frontCard"><div class="card-inner" id="cardInner"></div></div>
+  </div>
+
+  <div class="hint" id="hint"></div>
+  <div class="dots" id="dots"></div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  var stackEl = document.getElementById('stack');
+  var frontCard = document.getElementById('frontCard');
+  var cardInner = document.getElementById('cardInner');
+  var peek1 = document.getElementById('peek1');
+  var peek2 = document.getElementById('peek2');
+  var lede = document.getElementById('lede');
+  var hint = document.getElementById('hint');
+  var dotsEl = document.getElementById('dots');
+  var restartBtn = document.getElementById('restartBtn');
+
+  var TOTAL_CARDS = 6;
+  var MIN_N = 1, MAX_N = 52;
+
+  var state = {
+    secret: null,
+    idx: 0, // 0 = intro, 1..6 = binary cards, 7 = guess
+    revealed: {},
+    revealTimers: {},
+    guessedWrongOnce: false,
+    solved: false
+  };
+
+  function makeCardNumbers(bit){
+    var arr = [];
+    for (var n = MIN_N; n <= MAX_N; n++){
+      if ((n >> bit) & 1) arr.push(n);
+    }
+    return arr;
+  }
+  var cardsData = [0,1,2,3,4,5].map(makeCardNumbers);
+
+  function answerFor(cardNum, secret){
+    var bit = cardNum - 1;
+    return ((secret >> bit) & 1) === 1;
+  }
+
+  function buildDots(){
+    dotsEl.innerHTML = '';
+    for (var i = 1; i <= TOTAL_CARDS; i++){
+      var d = document.createElement('span');
+      d.dataset.i = i;
+      dotsEl.appendChild(d);
+    }
+  }
+  function updateDots(){
+    var dots = dotsEl.querySelectorAll('span');
+    dots.forEach(function(d){
+      var i = parseInt(d.dataset.i, 10);
+      d.classList.toggle('on', i <= state.idx && state.idx <= TOTAL_CARDS ? i <= state.idx : (state.idx > TOTAL_CARDS));
+    });
+  }
+
+  function setLede(text){ lede.textContent = text; }
+  function setHint(text){ hint.textContent = text; }
+
+  function updatePeeks(){
+    var showPeeks = state.idx < TOTAL_CARDS + 1;
+    peek1.classList.toggle('hide', !showPeeks);
+    peek2.classList.toggle('hide', !showPeeks);
+  }
+
+  // ---------- rendering ----------
+
+  function renderIntro(){
+    cardInner.innerHTML =
+      '<div class="intro-title">Think of a number</div>' +
+      '<div class="intro-sub">Pick anything from 1 to 52. Don\u2019t tell me &mdash; just hold it in mind.</div>' +
+      '<button class="think-btn" id="thinkBtn">Think of a number</button>' +
+      '<div class="locked" id="lockedMsg">Locked in.</div>';
+    setLede('');
+    setHint('');
+    var btn = document.getElementById('thinkBtn');
+    btn.addEventListener('click', onThinkPressed);
+  }
+
+  function onThinkPressed(){
+    var btn = document.getElementById('thinkBtn');
+    btn.disabled = true;
+    state.secret = Math.floor(Math.random() * (MAX_N - MIN_N + 1)) + MIN_N;
+    document.getElementById('lockedMsg').classList.add('show');
+    setTimeout(function(){
+      advanceTo(1, 'left');
+    }, 650);
+  }
+
+  function renderNumberCard(cardNum){
+    var nums = cardsData[cardNum - 1];
+    var gridHtml = nums.map(function(n){ return '<span>' + n + '</span>'; }).join('');
+    cardInner.innerHTML =
+      '<div class="card-eyebrow">Card ' + cardNum + ' of ' + TOTAL_CARDS + '</div>' +
+      '<div class="grid">' + gridHtml + '</div>' +
+      '<div id="answerZone"></div>';
+
+    setLede('Is your number on this card?');
+    setHint('Swipe left once you have an answer. Swipe right to go back.');
+
+    if (state.revealed[cardNum]){
+      showAnswer(cardNum, false);
+    } else {
+      var zone = document.getElementById('answerZone');
+      var dot = document.createElement('div');
+      dot.className = 'waiting-dot';
+      zone.appendChild(dot);
+
+      if (state.revealTimers[cardNum]) clearTimeout(state.revealTimers[cardNum]);
+      state.revealTimers[cardNum] = setTimeout(function(){
+        state.revealed[cardNum] = true;
+        if (state.idx === cardNum) showAnswer(cardNum, true);
+      }, 2000);
+    }
+  }
+
+  function showAnswer(cardNum, animate){
+    var zone = document.getElementById('answerZone');
+    if (!zone) return;
+    var isYes = answerFor(cardNum, state.secret);
+    zone.innerHTML = '<div class="answer ' + (isYes ? 'yes' : 'no') + '" id="answerEl">' + (isYes ? 'Yes' : 'No') + '</div>';
+    var el = document.getElementById('answerEl');
+    if (animate){
+      requestAnimationFrame(function(){ el.classList.add('show'); });
+    } else {
+      el.classList.add('show');
+    }
+    setHint('Swipe left to continue. Swipe right to go back.');
+  }
+
+  function renderGuess(){
+    cardInner.innerHTML =
+      '<div class="guess-title">What\u2019s the number?</div>' +
+      '<div class="guess-form">' +
+        '<input class="guess-input" id="guessInput" type="number" min="1" max="52" inputmode="numeric" autocomplete="off">' +
+        '<button class="action-btn" id="checkBtn">Check</button>' +
+      '</div>' +
+      '<div class="feedback" id="feedback"></div>' +
+      '<button class="give-up" id="giveUpBtn">I give up</button>';
+
+    setLede('Add up the first number on every card that said yes.');
+    setHint('Swipe right to review the cards.');
+
+    var input = document.getElementById('guessInput');
+    var checkBtn = document.getElementById('checkBtn');
+    var giveUpBtn = document.getElementById('giveUpBtn');
+    var feedback = document.getElementById('feedback');
+
+    if (state.solved){
+      input.value = state.secret;
+      input.disabled = true;
+      checkBtn.disabled = true;
+      feedback.textContent = 'Correct! The number was ' + state.secret + '.';
+      feedback.className = 'feedback correct';
+    } else if (state.gaveUp){
+      input.value = state.secret;
+      input.disabled = true;
+      checkBtn.disabled = true;
+      feedback.textContent = 'The number was ' + state.secret + '.';
+      feedback.className = 'feedback wrong';
+    } else {
+      if (state.guessedWrongOnce) giveUpBtn.classList.add('show');
+    }
+
+    function submitGuess(){
+      var val = parseInt(input.value, 10);
+      if (isNaN(val)) return;
+      if (val === state.secret){
+        state.solved = true;
+        input.disabled = true;
+        checkBtn.disabled = true;
+        feedback.textContent = 'Correct! The number was ' + state.secret + '.';
+        feedback.className = 'feedback correct';
+        giveUpBtn.classList.remove('show');
+      } else {
+        feedback.textContent = 'Not quite. Try again.';
+        feedback.className = 'feedback wrong';
+        state.guessedWrongOnce = true;
+        giveUpBtn.classList.add('show');
+        input.select();
+      }
+    }
+
+    checkBtn.addEventListener('click', submitGuess);
+    input.addEventListener('keydown', function(e){
+      if (e.key === 'Enter') submitGuess();
+    });
+    giveUpBtn.addEventListener('click', function(){
+      state.gaveUp = true;
+      input.value = state.secret;
+      input.disabled = true;
+      checkBtn.disabled = true;
+      feedback.textContent = 'The number was ' + state.secret + '.';
+      feedback.className = 'feedback wrong';
+      giveUpBtn.classList.remove('show');
+    });
+
+    setTimeout(function(){ input.focus(); }, 50);
+  }
+
+  function renderCurrent(){
+    if (state.idx === 0) renderIntro();
+    else if (state.idx >= 1 && state.idx <= TOTAL_CARDS) renderNumberCard(state.idx);
+    else renderGuess();
+    updateDots();
+    updatePeeks();
+  }
+
+  // ---------- navigation / swipe mechanics ----------
+
+  function canGoNext(){
+    if (state.idx === 0) return false; // handled by button
+    if (state.idx >= 1 && state.idx <= TOTAL_CARDS) return !!state.revealed[state.idx];
+    return false; // idx 7, no next
+  }
+  function canGoBack(){
+    return state.idx > 1;
+  }
+
+  function advanceTo(newIdx, direction){
+    frontCard.classList.remove('entering');
+    frontCard.classList.add('leaving');
+    var offX = direction === 'left' ? -window.innerWidth : window.innerWidth;
+    var rot = direction === 'left' ? -10 : 10;
+    frontCard.style.transform = 'translateX(' + offX + 'px) rotate(' + rot + 'deg)';
+    frontCard.style.opacity = '0';
+
+    setTimeout(function(){
+      state.idx = newIdx;
+      frontCard.classList.remove('leaving');
+      frontCard.style.transition = 'none';
+      frontCard.style.transform = 'translateX(0) rotate(0)';
+      frontCard.style.opacity = '1';
+      renderCurrent();
+      void frontCard.offsetWidth;
+      frontCard.classList.add('entering');
+      setTimeout(function(){ frontCard.classList.remove('entering'); frontCard.style.transition=''; }, 340);
+    }, 380);
+  }
+
+  // Pointer drag
+  var drag = { active:false, startX:0, dx:0, pointerId:null };
+
+  frontCard.addEventListener('pointerdown', function(e){
+    if (state.idx === 0) return; // intro card: button only
+    drag.active = true;
+    drag.startX = e.clientX;
+    drag.dx = 0;
+    drag.pointerId = e.pointerId;
+    frontCard.setPointerCapture(e.pointerId);
+    frontCard.classList.add('dragging');
+    frontCard.classList.remove('snapping');
+  });
+
+  frontCard.addEventListener('pointermove', function(e){
+    if (!drag.active) return;
+    drag.dx = e.clientX - drag.startX;
+    var rot = drag.dx / 22;
+    frontCard.style.transform = 'translateX(' + drag.dx + 'px) rotate(' + rot + 'deg)';
+    var op = Math.max(0.4, 1 - Math.abs(drag.dx) / 500);
+    frontCard.style.opacity = String(op);
+  });
+
+  function endDrag(e){
+    if (!drag.active) return;
+    drag.active = false;
+    frontCard.classList.remove('dragging');
+    var THRESHOLD = 85;
+    var dx = drag.dx;
+
+    if (dx <= -THRESHOLD && canGoNext()){
+      commitSwipe('left');
+    } else if (dx >= THRESHOLD && canGoBack()){
+      commitSwipe('right');
+    } else {
+      if (Math.abs(dx) > 20 && ((dx < 0 && !canGoNext()) || (dx > 0 && !canGoBack()))){
+        snapBackWithResistance();
+      } else {
+        snapBack();
+      }
+    }
+    drag.dx = 0;
+  }
+
+  frontCard.addEventListener('pointerup', endDrag);
+  frontCard.addEventListener('pointercancel', endDrag);
+
+  function snapBack(){
+    frontCard.classList.add('snapping');
+    frontCard.style.transform = 'translateX(0) rotate(0)';
+    frontCard.style.opacity = '1';
+  }
+
+  function snapBackWithResistance(){
+    frontCard.classList.add('snapping');
+    frontCard.style.transform = 'translateX(0) rotate(0)';
+    frontCard.style.opacity = '1';
+    stackEl.animate(
+      [{ transform: 'translateX(0)' }, { transform: 'translateX(-4px)' }, { transform: 'translateX(4px)' }, { transform: 'translateX(0)' }],
+      { duration: 220, easing: 'ease-in-out' }
+    );
+  }
+
+  function commitSwipe(direction){
+    var nextIdx = direction === 'left' ? state.idx + 1 : state.idx - 1;
+    frontCard.classList.add('leaving');
+    frontCard.style.transition = 'transform .38s cubic-bezier(.4,0,.6,1), opacity .38s ease';
+    var offX = direction === 'left' ? -window.innerWidth : window.innerWidth;
+    var rot = direction === 'left' ? -14 : 14;
+    frontCard.style.transform = 'translateX(' + offX + 'px) rotate(' + rot + 'deg)';
+    frontCard.style.opacity = '0';
+
+    setTimeout(function(){
+      state.idx = nextIdx;
+      frontCard.classList.remove('leaving');
+      frontCard.style.transition = 'none';
+      frontCard.style.transform = 'translateX(0) rotate(0)';
+      frontCard.style.opacity = '1';
+      renderCurrent();
+      void frontCard.offsetWidth;
+      frontCard.classList.add('entering');
+      setTimeout(function(){ frontCard.classList.remove('entering'); frontCard.style.transition=''; }, 340);
+    }, 380);
+  }
+
+  // ---------- restart ----------
+  function resetAll(){
+    Object.keys(state.revealTimers).forEach(function(k){ clearTimeout(state.revealTimers[k]); });
+    state = {
+      secret: null,
+      idx: 0,
+      revealed: {},
+      revealTimers: {},
+      guessedWrongOnce: false,
+      solved: false,
+      gaveUp: false
+    };
+    frontCard.style.transition = 'none';
+    frontCard.style.transform = 'translateX(0) rotate(0)';
+    frontCard.style.opacity = '1';
+    frontCard.classList.remove('leaving','dragging','snapping','entering');
+    renderCurrent();
+  }
+
+  restartBtn.addEventListener('click', resetAll);
+
+  // init
+  buildDots();
+  resetAll();
+})();
+</script>
+</body>
+</html>
