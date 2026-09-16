@@ -471,6 +471,28 @@
   }
   .mode-menu-btn:hover{ border-color: var(--brass); background: rgba(166,135,90,.1); }
   .mode-menu-btn.current{ border-color: var(--brass); background: rgba(166,135,90,.15); }
+
+  /* spectator yes/no tap buttons (Elmsley Beta performance) */
+  .yesno-btn{
+    display:none;
+    font-family:'Inter', sans-serif;
+    font-weight:600;
+    font-size: .95rem;
+    letter-spacing:.04em;
+    width: min(84vw, 300px);
+    background: transparent;
+    border: 1.5px solid var(--brass-dim);
+    color: var(--paper);
+    padding: 10px 0;
+    border-radius: 999px;
+    cursor:pointer;
+    transition: background .15s ease, border-color .15s ease, transform .1s ease;
+  }
+  .yesno-btn:active{ transform: scale(.97); }
+  .yesno-btn.yes-btn{ border-color: rgba(122,46,39,.55); }
+  .yesno-btn.no-btn{ border-color: rgba(85,98,79,.55); }
+  .yesno-btn.yes-btn.selected{ background: var(--oxblood); border-color: var(--oxblood); }
+  .yesno-btn.no-btn.selected{ background: var(--sage); border-color: var(--sage); }
 </style>
 </head>
 <body>
@@ -488,11 +510,15 @@
 <div class="app">
   <div class="lede" id="lede" aria-live="polite"></div>
 
+  <button class="yesno-btn yes-btn" id="yesBtn" type="button">YES</button>
+
   <div class="stack" id="stack">
     <div class="peek peek-back peek2" id="peek2"></div>
     <div class="peek peek-back peek1" id="peek1"></div>
     <div class="card" id="frontCard"><div class="card-inner" id="cardInner"></div></div>
   </div>
+
+  <button class="yesno-btn no-btn" id="noBtn" type="button">NO</button>
 
   <div class="hint" id="hint"></div>
   <div class="dots" id="dots"></div>
@@ -512,6 +538,8 @@
   var dotsEl = document.getElementById('dots');
   var restartBtn = document.getElementById('restartBtn');
   var modeMenu = document.getElementById('modeMenu');
+  var yesBtn = document.getElementById('yesBtn');
+  var noBtn = document.getElementById('noBtn');
 
   var TOTAL_CARDS = 6;
   var MIN_N = 1, MAX_N = 52;
@@ -562,7 +590,9 @@
     revealed: {},
     revealTimers: {},
     guessedWrongOnce: false,
-    solved: false
+    solved: false,
+    answers: {},   // beta performance: step -> true(yes)/false(no)
+    answered: {}   // beta performance: step -> true once tapped
   };
 
   function makeCardNumbers(bit){
@@ -861,7 +891,7 @@
 
     if (settings.betaSub === 'performance'){
       setLede('');
-      setHint('Swipe left when ready.');
+      setHint('Tap their answer, then swipe left to continue.');
       return;
     }
 
@@ -908,8 +938,7 @@
 
     if (settings.betaSub === 'performance'){
       setLede('');
-      var isLastPerformanceCard = (step === 12);
-      setHint(isLastPerformanceCard ? '' : 'Swipe left when ready. Swipe right to go back.');
+      setHint('Tap their answer, then swipe left to continue.');
       return;
     }
 
@@ -943,7 +972,48 @@
     setHint('Swipe left to continue. Swipe right to go back.');
   }
 
+  function decodeAnswers(kind){
+    // kind: 'number' or 'card'. Reconstructs a 1-52 value from the taps
+    // on the matching set of screens, using the same descending bit order.
+    var value = 0;
+    for (var pos = 1; pos <= TOTAL_CARDS; pos++){
+      var step = (kind === 'number') ? (2 * pos - 1) : (2 * pos);
+      var bit = betaBitForPosition(pos);
+      if (state.answers[step]) value += (1 << bit);
+    }
+    return value;
+  }
+
+  var BETA_SUSPENSE_TEXTS = {
+    13: 'Thank you for playing, I will now read your mind...',
+    14: 'I am sensing one number, and one card...',
+    15: 'Are you thinking....'
+  };
+
+  function renderBetaSuspense(step){
+    cardInner.innerHTML = '<div class="intro-sub intro-sub-solo">' + BETA_SUSPENSE_TEXTS[step] + '</div>';
+    setLede('');
+    setHint('Swipe left to continue. Swipe right to go back.');
+  }
+
   function renderBetaReveal(){
+    if (settings.betaSub === 'performance'){
+      var decodedNumber = decodeAnswers('number');
+      var decodedCardNum = decodeAnswers('card');
+      var cardKey = Object.keys(CARD_TO_NUMBER).filter(function(k){ return CARD_TO_NUMBER[k] === decodedCardNum; })[0];
+      var cardObj = cardKey ? ALL_CARDS.filter(function(c){ return c.key === cardKey; })[0] : null;
+      var cardColor = (cardObj && cardObj.suit.color === 'red') ? 'var(--oxblood)' : 'var(--charcoal)';
+      cardInner.innerHTML =
+        '<div class="intro-sub intro-sub-solo">the number ' +
+        '<strong style="color:var(--oxblood);">' + decodedNumber + '</strong>' +
+        ' and the ' +
+        '<strong style="color:' + cardColor + ';">' + (cardObj ? cardObj.label : '?') + '</strong>?' +
+        '</div>';
+      setLede('');
+      setHint('Swipe right to review.');
+      return;
+    }
+
     var suitObj = SUITS.filter(function(s){ return s.letter === settings.chosenCardKey.slice(-1); })[0];
     var rank = settings.chosenCardKey.slice(0, -1);
     cardInner.innerHTML =
@@ -953,6 +1023,18 @@
       '<div class="reveal-number">' + state.secret + '</div>';
     setLede('');
     setHint('Swipe right to review the cards.');
+  }
+
+  function updateAnswerButtons(){
+    var show = settings.flow === 'beta' && settings.betaSub === 'performance' &&
+      state.idx >= 1 && state.idx <= 12;
+    yesBtn.style.display = show ? 'block' : 'none';
+    noBtn.style.display = show ? 'block' : 'none';
+    if (show){
+      var ans = state.answers[state.idx];
+      yesBtn.classList.toggle('selected', ans === true);
+      noBtn.classList.toggle('selected', ans === false);
+    }
   }
 
   function renderCurrent(){
@@ -966,12 +1048,15 @@
       else if (state.idx >= 1 && state.idx <= 12){
         if (betaStepType(state.idx) === 'number') renderBetaNumber(state.idx);
         else renderBetaCard(state.idx);
+      } else if (settings.betaSub === 'performance' && state.idx >= 13 && state.idx <= 15){
+        renderBetaSuspense(state.idx);
       } else {
         renderBetaReveal();
       }
     }
     updateDots();
     updatePeeks();
+    updateAnswerButtons();
   }
 
   // ---------- navigation / swipe mechanics ----------
@@ -986,13 +1071,15 @@
     if (state.idx === 0) return false; // card picker: button only
     if (state.idx >= 1 && state.idx <= 12){
       if (settings.betaSub === 'performance'){
-        if (state.idx === 12) return false; // last screen is the end of the stack
-        return true;
+        return !!state.answered[state.idx];
       }
       // practice: every step (number or card) gates on its simulated reveal
       return !!state.revealed[state.idx];
     }
-    return false; // reveal screen, no next
+    if (settings.betaSub === 'performance' && state.idx >= 13 && state.idx <= 15){
+      return true; // suspense text screens, free to advance
+    }
+    return false; // final reveal screen, no next
   }
   function canGoBack(){
     if (settings.flow === 'binary') return state.idx > 1;
@@ -1176,6 +1263,18 @@
   document.addEventListener('touchend', function(e){
     if (e.touches.length < 2) twoFinger.active = false;
   }, { passive: true });
+
+  // spectator yes/no taps (Elmsley Beta performance) -- records the answer
+  // and recolors the button; the performer swipes left when ready.
+  function handleAnswerTap(isYes){
+    if (!(settings.flow === 'beta' && settings.betaSub === 'performance')) return;
+    if (state.idx < 1 || state.idx > 12) return;
+    state.answers[state.idx] = isYes;
+    state.answered[state.idx] = true;
+    updateAnswerButtons();
+  }
+  yesBtn.addEventListener('click', function(){ handleAnswerTap(true); });
+  noBtn.addEventListener('click', function(){ handleAnswerTap(false); });
 
   // init
   buildDots();
