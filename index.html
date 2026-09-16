@@ -381,11 +381,109 @@
   @media (prefers-reduced-motion: reduce){
     .card, .peek, .answer, .locked{ transition:none !important; animation:none !important; }
   }
+
+  /* card labels (Elmsley Beta "list of cards" screens) */
+  .grid span.card-label{
+    font-size: 5.4cqw;
+  }
+  .grid span.suit-red{ color: var(--oxblood); }
+  .grid span.suit-dark{ color: var(--charcoal); }
+
+  /* card picker (Elmsley Beta practice setup) */
+  .picker-label{
+    font-size: 3.4cqw;
+    color: var(--charcoal);
+    opacity:.6;
+    letter-spacing:.03em;
+  }
+  .rank-row, .suit-row{
+    display:flex;
+    flex-wrap:wrap;
+    justify-content:center;
+    gap: 1.4cqw;
+    width:100%;
+  }
+  .pick-btn{
+    font-family:'Fraunces', Georgia, serif;
+    font-weight:500;
+    font-size: 4.6cqw;
+    min-width: 8.5cqw;
+    background: rgba(42,38,32,.06);
+    color: var(--charcoal);
+    border: 1px solid rgba(42,38,32,.15);
+    border-radius: 8px;
+    padding: 1.6cqw 1.2cqw;
+    cursor:pointer;
+    transition: background .15s ease, color .15s ease, border-color .15s ease;
+  }
+  .pick-btn.suit-red{ color: var(--oxblood); }
+  .pick-btn.suit-dark{ color: var(--charcoal); }
+  .pick-btn.active{
+    background: var(--charcoal);
+    color: var(--paper) !important;
+    border-color: var(--charcoal);
+  }
+  .picker-preview{
+    font-family:'Fraunces', Georgia, serif;
+    font-weight:600;
+    font-size: 6cqw;
+    min-height: 1.3em;
+    color: var(--oxblood);
+  }
+
+  /* secret mode menu */
+  .mode-menu{
+    position:fixed;
+    inset:0;
+    z-index:100;
+    background: rgba(20,18,15,.94);
+    backdrop-filter: blur(2px);
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap: 14px;
+    opacity:0;
+    pointer-events:none;
+    transition: opacity .25s ease;
+  }
+  .mode-menu.open{ opacity:1; pointer-events:auto; }
+  .mode-menu-title{
+    font-family:'Inter', sans-serif;
+    font-size: .78rem;
+    letter-spacing:.08em;
+    color: var(--brass);
+    opacity:.7;
+    margin-bottom: 6px;
+  }
+  .mode-menu-btn{
+    font-family:'Fraunces', Georgia, serif;
+    font-weight:500;
+    font-size: 1.15rem;
+    background: none;
+    border: 1px solid var(--brass-dim);
+    color: var(--paper);
+    padding: 12px 28px;
+    border-radius: 999px;
+    cursor:pointer;
+    min-width: 240px;
+    transition: border-color .2s ease, background .2s ease;
+  }
+  .mode-menu-btn:hover{ border-color: var(--brass); background: rgba(166,135,90,.1); }
+  .mode-menu-btn.current{ border-color: var(--brass); background: rgba(166,135,90,.15); }
 </style>
 </head>
 <body>
 
 <button class="restart" id="restartBtn" aria-label="Restart the trick">Restart</button>
+
+<div class="mode-menu" id="modeMenu">
+  <div class="mode-menu-title">CHOOSE A MODE</div>
+  <button class="mode-menu-btn" data-flow="binary" data-mode="classic">Classic</button>
+  <button class="mode-menu-btn" data-flow="binary" data-mode="elmsley">Elmsley</button>
+  <button class="mode-menu-btn" data-flow="beta" data-mode="practice">Elmsley Beta — Practice</button>
+  <button class="mode-menu-btn" data-flow="beta" data-mode="performance">Elmsley Beta — Performance</button>
+</div>
 
 <div class="app">
   <div class="lede" id="lede" aria-live="polite"></div>
@@ -413,9 +511,50 @@
   var hint = document.getElementById('hint');
   var dotsEl = document.getElementById('dots');
   var restartBtn = document.getElementById('restartBtn');
+  var modeMenu = document.getElementById('modeMenu');
 
   var TOTAL_CARDS = 6;
   var MIN_N = 1, MAX_N = 52;
+
+  // ---------- fixed card deck (generated once, never reshuffled at runtime) ----------
+  var RANKS = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+  var SUITS = [
+    { sym:'\u2660', letter:'S', color:'dark' }, // spades
+    { sym:'\u2665', letter:'H', color:'red'  }, // hearts
+    { sym:'\u2666', letter:'D', color:'red'  }, // diamonds
+    { sym:'\u2663', letter:'C', color:'dark' }  // clubs
+  ];
+  // one-time fixed permutation assigning numbers 1-52 to cards in
+  // Spades A-K, Hearts A-K, Diamonds A-K, Clubs A-K order. Generated once;
+  // never regenerated at runtime so it's identical every performance.
+  var FIXED_NUMBER_ORDER = [22,28,16,15,37,14,3,38,4,47,12,36,20,33,6,2,25,40,51,21,27,11,44,35,48,49,23,9,26,42,43,52,34,18,31,7,10,46,50,1,39,24,29,5,19,13,8,32,30,45,17,41];
+
+  var ALL_CARDS = [];
+  SUITS.forEach(function(suit){
+    RANKS.forEach(function(rank){
+      ALL_CARDS.push({
+        key: rank + suit.letter,
+        rank: rank,
+        suit: suit,
+        label: rank + suit.sym
+      });
+    });
+  });
+  var CARD_TO_NUMBER = {};
+  ALL_CARDS.forEach(function(c, i){ CARD_TO_NUMBER[c.key] = FIXED_NUMBER_ORDER[i]; });
+
+  function cardsForBit(bit){
+    return ALL_CARDS.filter(function(c){ return ((CARD_TO_NUMBER[c.key] >> bit) & 1) === 1; });
+  }
+  var CARD_BIT_LISTS = [0,1,2,3,4,5].map(cardsForBit);
+
+  // ---------- settings (persist across restarts; only the mode menu changes these) ----------
+  var settings = {
+    flow: 'binary',      // 'binary' | 'beta'
+    mode: 'classic',     // used when flow === 'binary': 'classic' | 'elmsley'
+    betaSub: 'practice', // used when flow === 'beta': 'practice' | 'performance'
+    chosenCardKey: null  // persists across practice restarts until changed
+  };
 
   var state = {
     secret: null,
@@ -423,8 +562,7 @@
     revealed: {},
     revealTimers: {},
     guessedWrongOnce: false,
-    solved: false,
-    mode: 'classic' // 'classic' or 'elmsley'
+    solved: false
   };
 
   function makeCardNumbers(bit){
@@ -438,8 +576,12 @@
 
   function bitForPosition(pos){
     // classic: position 1 -> bit0 (1s), position 6 -> bit5 (32s)
-    // elmsley: position 1 -> bit5 (32s), position 6 -> bit0 (1s) -- descending
-    return state.mode === 'elmsley' ? (TOTAL_CARDS - pos) : (pos - 1);
+    // elmsley / beta: position 1 -> bit5 (32s), position 6 -> bit0 (1s) -- descending
+    return settings.mode === 'elmsley' ? (TOTAL_CARDS - pos) : (pos - 1);
+  }
+  function betaBitForPosition(pos){
+    // Elmsley Beta always runs descending, MSB first, matching a real Faro control
+    return TOTAL_CARDS - pos;
   }
 
   function answerFor(cardNum, secret){
@@ -447,19 +589,30 @@
     return ((secret >> bit) & 1) === 1;
   }
 
+  function totalStepsForFlow(){
+    if (settings.flow === 'beta') return 12;
+    return TOTAL_CARDS;
+  }
+
   function buildDots(){
+    var total = totalStepsForFlow();
     dotsEl.innerHTML = '';
-    for (var i = 1; i <= TOTAL_CARDS; i++){
+    for (var i = 1; i <= total; i++){
       var d = document.createElement('span');
       d.dataset.i = i;
       dotsEl.appendChild(d);
     }
+    dotsEl.dataset.total = total;
   }
   function updateDots(){
+    var total = parseInt(dotsEl.dataset.total, 10) || totalStepsForFlow();
+    if (total !== totalStepsForFlow()) buildDots();
     var dots = dotsEl.querySelectorAll('span');
+    var lit = Math.min(state.idx, total);
+    if (state.idx > total) lit = total;
     dots.forEach(function(d){
       var i = parseInt(d.dataset.i, 10);
-      d.classList.toggle('on', i <= state.idx && state.idx <= TOTAL_CARDS ? i <= state.idx : (state.idx > TOTAL_CARDS));
+      d.classList.toggle('on', i <= lit);
     });
   }
 
@@ -467,34 +620,21 @@
   function setHint(text){ hint.textContent = text; }
 
   function updatePeeks(){
-    var showPeeks = state.idx < TOTAL_CARDS + 1;
+    var total = totalStepsForFlow();
+    var showPeeks = state.idx < total + 1;
     peek1.classList.toggle('hide', !showPeeks);
     peek2.classList.toggle('hide', !showPeeks);
   }
 
-  // ---------- rendering ----------
+  // ---------- rendering: Classic / Elmsley ----------
 
   function renderIntro(){
     cardInner.innerHTML =
       '<div class="intro-sub intro-sub-solo">I am going to think of a number between 1 and 52. Press begin to start.</div>' +
-      '<div class="mode-toggle" id="modeToggle">' +
-        '<button class="mode-btn" data-mode="classic" type="button">Classic</button>' +
-        '<button class="mode-btn" data-mode="elmsley" type="button">Elmsley</button>' +
-      '</div>' +
       '<button class="think-btn" id="thinkBtn">BEGIN</button>' +
       '<div class="locked" id="lockedMsg">Locked in.</div>';
     setLede('');
     setHint('');
-
-    var toggle = document.getElementById('modeToggle');
-    var modeBtns = toggle.querySelectorAll('.mode-btn');
-    modeBtns.forEach(function(b){
-      b.classList.toggle('active', b.dataset.mode === state.mode);
-      b.addEventListener('click', function(){
-        state.mode = b.dataset.mode;
-        modeBtns.forEach(function(x){ x.classList.toggle('active', x.dataset.mode === state.mode); });
-      });
-    });
 
     var btn = document.getElementById('thinkBtn');
     btn.addEventListener('click', onThinkPressed);
@@ -552,7 +692,7 @@
   }
 
   function renderGuess(){
-    if (state.mode === 'elmsley'){
+    if (settings.mode === 'elmsley'){
       cardInner.innerHTML =
         '<div class="guess-title">Your number was</div>' +
         '<div class="reveal-number">' + state.secret + '</div>';
@@ -630,10 +770,206 @@
     setTimeout(function(){ input.focus(); }, 50);
   }
 
+  // ---------- rendering: Elmsley Beta ----------
+
+  function renderCardPicker(){
+    cardInner.innerHTML =
+      '<div class="picker-label">Which card did they choose?</div>' +
+      '<div class="rank-row" id="rankRow"></div>' +
+      '<div class="suit-row" id="suitRow"></div>' +
+      '<div class="picker-preview" id="pickerPreview"></div>' +
+      '<button class="think-btn" id="beginBetaBtn">BEGIN</button>' +
+      '<div class="locked" id="lockedMsg">Locked in.</div>';
+    setLede('');
+    setHint('');
+
+    var rankRow = document.getElementById('rankRow');
+    var suitRow = document.getElementById('suitRow');
+    var preview = document.getElementById('pickerPreview');
+    var beginBtn = document.getElementById('beginBetaBtn');
+
+    var picked = { rank: null, suitLetter: null };
+    if (settings.chosenCardKey){
+      picked.rank = settings.chosenCardKey.slice(0, -1);
+      picked.suitLetter = settings.chosenCardKey.slice(-1);
+    }
+
+    RANKS.forEach(function(r){
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'pick-btn';
+      b.textContent = r;
+      b.dataset.rank = r;
+      if (r === picked.rank) b.classList.add('active');
+      b.addEventListener('click', function(){
+        picked.rank = r;
+        rankRow.querySelectorAll('.pick-btn').forEach(function(x){ x.classList.toggle('active', x.dataset.rank === r); });
+        updatePreview();
+      });
+      rankRow.appendChild(b);
+    });
+
+    SUITS.forEach(function(s){
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'pick-btn suit-' + s.color;
+      b.textContent = s.sym;
+      b.dataset.suit = s.letter;
+      if (s.letter === picked.suitLetter) b.classList.add('active');
+      b.addEventListener('click', function(){
+        picked.suitLetter = s.letter;
+        suitRow.querySelectorAll('.pick-btn').forEach(function(x){ x.classList.toggle('active', x.dataset.suit === s.letter); });
+        updatePreview();
+      });
+      suitRow.appendChild(b);
+    });
+
+    function updatePreview(){
+      if (picked.rank && picked.suitLetter){
+        var suitObj = SUITS.filter(function(s){ return s.letter === picked.suitLetter; })[0];
+        preview.textContent = picked.rank + suitObj.sym;
+        beginBtn.disabled = false;
+      } else {
+        preview.textContent = '';
+        beginBtn.disabled = true;
+      }
+    }
+    updatePreview();
+
+    beginBtn.addEventListener('click', function(){
+      if (!picked.rank || !picked.suitLetter) return;
+      settings.chosenCardKey = picked.rank + picked.suitLetter;
+      beginBtn.disabled = true;
+      document.getElementById('lockedMsg').classList.add('show');
+      state.secret = Math.floor(Math.random() * (MAX_N - MIN_N + 1)) + MIN_N;
+      setTimeout(function(){ advanceTo(1, 'left'); }, 650);
+    });
+  }
+
+  function betaStepType(step){ return (step % 2 === 1) ? 'number' : 'card'; }
+  function betaStepPos(step){ return Math.ceil(step / 2); }
+
+  function renderBetaNumber(step){
+    var pos = betaStepPos(step);
+    var bit = betaBitForPosition(pos);
+    var nums = makeCardNumbers(bit);
+    var gridHtml = nums.map(function(n){ return '<span>' + n + '</span>'; }).join('');
+    cardInner.innerHTML =
+      '<div class="card-eyebrow">Numbers ' + pos + ' of ' + TOTAL_CARDS + '</div>' +
+      '<div class="grid">' + gridHtml + '</div>' +
+      '<div id="answerZone"></div>';
+
+    if (settings.betaSub === 'performance'){
+      setLede('');
+      setHint('Swipe left when ready.');
+      return;
+    }
+
+    setLede('Simulated answer, for reflex practice.');
+    setHint('Swipe left once you have an answer. Swipe right to go back.');
+
+    if (state.revealed[step]){
+      showBetaAnswer(step, bit, false);
+    } else {
+      var zone = document.getElementById('answerZone');
+      var dot = document.createElement('div');
+      dot.className = 'waiting-dot';
+      zone.appendChild(dot);
+      if (state.revealTimers[step]) clearTimeout(state.revealTimers[step]);
+      state.revealTimers[step] = setTimeout(function(){
+        state.revealed[step] = true;
+        if (state.idx === step) showBetaAnswer(step, bit, true);
+      }, 2000);
+    }
+  }
+
+  function showBetaAnswer(step, bit, animate){
+    var zone = document.getElementById('answerZone');
+    if (!zone) return;
+    var isYes = ((state.secret >> bit) & 1) === 1;
+    zone.innerHTML = '<div class="answer ' + (isYes ? 'yes' : 'no') + '" id="answerEl">' + (isYes ? 'Yes' : 'No') + '</div>';
+    var el = document.getElementById('answerEl');
+    if (animate){ requestAnimationFrame(function(){ el.classList.add('show'); }); }
+    else { el.classList.add('show'); }
+    setHint('Swipe left to continue. Swipe right to go back.');
+  }
+
+  function renderBetaCard(step){
+    var pos = betaStepPos(step);
+    var bit = betaBitForPosition(pos);
+    var cards = CARD_BIT_LISTS[bit];
+    var gridHtml = cards.map(function(c){
+      return '<span class="card-label suit-' + c.suit.color + '">' + c.label + '</span>';
+    }).join('');
+    cardInner.innerHTML =
+      '<div class="card-eyebrow">Cards ' + pos + ' of ' + TOTAL_CARDS + '</div>' +
+      '<div class="grid">' + gridHtml + '</div>' +
+      '<div id="answerZone"></div>';
+
+    if (settings.betaSub === 'performance'){
+      setLede('');
+      var isLastPerformanceCard = (step === 12);
+      setHint(isLastPerformanceCard ? '' : 'Swipe left when ready. Swipe right to go back.');
+      return;
+    }
+
+    setLede('Simulated answer, for reflex practice.');
+    setHint('Swipe left once you have an answer. Swipe right to go back.');
+
+    if (state.revealed[step]){
+      showBetaCardAnswer(step, bit, false);
+    } else {
+      var zone = document.getElementById('answerZone');
+      var dot = document.createElement('div');
+      dot.className = 'waiting-dot';
+      zone.appendChild(dot);
+      if (state.revealTimers[step]) clearTimeout(state.revealTimers[step]);
+      state.revealTimers[step] = setTimeout(function(){
+        state.revealed[step] = true;
+        if (state.idx === step) showBetaCardAnswer(step, bit, true);
+      }, 2000);
+    }
+  }
+
+  function showBetaCardAnswer(step, bit, animate){
+    var zone = document.getElementById('answerZone');
+    if (!zone) return;
+    var cardNum = CARD_TO_NUMBER[settings.chosenCardKey];
+    var isYes = ((cardNum >> bit) & 1) === 1;
+    zone.innerHTML = '<div class="answer ' + (isYes ? 'yes' : 'no') + '" id="answerEl">' + (isYes ? 'Yes' : 'No') + '</div>';
+    var el = document.getElementById('answerEl');
+    if (animate){ requestAnimationFrame(function(){ el.classList.add('show'); }); }
+    else { el.classList.add('show'); }
+    setHint('Swipe left to continue. Swipe right to go back.');
+  }
+
+  function renderBetaReveal(){
+    var suitObj = SUITS.filter(function(s){ return s.letter === settings.chosenCardKey.slice(-1); })[0];
+    var rank = settings.chosenCardKey.slice(0, -1);
+    cardInner.innerHTML =
+      '<div class="guess-title">Chosen card</div>' +
+      '<div class="reveal-number" style="font-size:11cqw;' + (suitObj.color === 'red' ? 'color:var(--oxblood);' : 'color:var(--charcoal);') + '">' + rank + suitObj.sym + '</div>' +
+      '<div class="guess-title" style="margin-top:8%;">Chosen number</div>' +
+      '<div class="reveal-number">' + state.secret + '</div>';
+    setLede('');
+    setHint('Swipe right to review the cards.');
+  }
+
   function renderCurrent(){
-    if (state.idx === 0) renderIntro();
-    else if (state.idx >= 1 && state.idx <= TOTAL_CARDS) renderNumberCard(state.idx);
-    else renderGuess();
+    if (settings.flow === 'binary'){
+      if (state.idx === 0) renderIntro();
+      else if (state.idx >= 1 && state.idx <= TOTAL_CARDS) renderNumberCard(state.idx);
+      else renderGuess();
+    } else {
+      // beta flow
+      if (state.idx === 0) renderCardPicker();
+      else if (state.idx >= 1 && state.idx <= 12){
+        if (betaStepType(state.idx) === 'number') renderBetaNumber(state.idx);
+        else renderBetaCard(state.idx);
+      } else {
+        renderBetaReveal();
+      }
+    }
     updateDots();
     updatePeeks();
   }
@@ -641,11 +977,25 @@
   // ---------- navigation / swipe mechanics ----------
 
   function canGoNext(){
-    if (state.idx === 0) return false; // handled by button
-    if (state.idx >= 1 && state.idx <= TOTAL_CARDS) return !!state.revealed[state.idx];
-    return false; // idx 7, no next
+    if (settings.flow === 'binary'){
+      if (state.idx === 0) return false; // handled by button
+      if (state.idx >= 1 && state.idx <= TOTAL_CARDS) return !!state.revealed[state.idx];
+      return false; // idx 7, no next
+    }
+    // beta flow
+    if (state.idx === 0) return false; // card picker: button only
+    if (state.idx >= 1 && state.idx <= 12){
+      if (settings.betaSub === 'performance'){
+        if (state.idx === 12) return false; // last screen is the end of the stack
+        return true;
+      }
+      // practice: every step (number or card) gates on its simulated reveal
+      return !!state.revealed[state.idx];
+    }
+    return false; // reveal screen, no next
   }
   function canGoBack(){
+    if (settings.flow === 'binary') return state.idx > 1;
     return state.idx > 1;
   }
 
@@ -674,7 +1024,7 @@
   var drag = { active:false, startX:0, dx:0, pointerId:null };
 
   frontCard.addEventListener('pointerdown', function(e){
-    if (state.idx === 0) return; // intro card: button only
+    if (state.idx === 0) return; // intro / card-picker screen: button only
     drag.active = true;
     drag.startX = e.clientX;
     drag.dx = 0;
@@ -757,26 +1107,75 @@
 
   // ---------- restart ----------
   function resetAll(){
-    var prevMode = state.mode || 'classic';
     Object.keys(state.revealTimers).forEach(function(k){ clearTimeout(state.revealTimers[k]); });
+    var startIdx = 0;
+    if (settings.flow === 'beta' && settings.betaSub === 'performance') startIdx = 1;
     state = {
       secret: null,
-      idx: 0,
+      idx: startIdx,
       revealed: {},
       revealTimers: {},
       guessedWrongOnce: false,
       solved: false,
-      gaveUp: false,
-      mode: prevMode
+      gaveUp: false
     };
+
     frontCard.style.transition = 'none';
     frontCard.style.transform = 'translateX(0) rotate(0)';
     frontCard.style.opacity = '1';
     frontCard.classList.remove('leaving','dragging','snapping','entering');
+    buildDots();
     renderCurrent();
   }
 
   restartBtn.addEventListener('click', resetAll);
+
+  // ---------- secret mode menu ----------
+  function openModeMenu(){
+    modeMenu.querySelectorAll('.mode-menu-btn').forEach(function(b){
+      var isCurrent = (b.dataset.flow === settings.flow) &&
+        ((settings.flow === 'binary' && b.dataset.mode === settings.mode) ||
+         (settings.flow === 'beta' && b.dataset.mode === settings.betaSub));
+      b.classList.toggle('current', isCurrent);
+    });
+    modeMenu.classList.add('open');
+  }
+  function closeModeMenu(){ modeMenu.classList.remove('open'); }
+
+  modeMenu.querySelectorAll('.mode-menu-btn').forEach(function(b){
+    b.addEventListener('click', function(){
+      var flow = b.dataset.flow;
+      settings.flow = flow;
+      if (flow === 'binary') settings.mode = b.dataset.mode;
+      else settings.betaSub = b.dataset.mode;
+      closeModeMenu();
+      resetAll();
+    });
+  });
+  modeMenu.addEventListener('click', function(e){
+    if (e.target === modeMenu) closeModeMenu();
+  });
+
+  // two-finger downward swipe anywhere opens the secret menu
+  var twoFinger = { active:false, startY:0, triggered:false };
+  document.addEventListener('touchstart', function(e){
+    if (e.touches.length === 2){
+      twoFinger.active = true;
+      twoFinger.triggered = false;
+      twoFinger.startY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+    }
+  }, { passive: true });
+  document.addEventListener('touchmove', function(e){
+    if (!twoFinger.active || e.touches.length !== 2 || twoFinger.triggered) return;
+    var avgY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+    if (avgY - twoFinger.startY > 70){
+      twoFinger.triggered = true;
+      openModeMenu();
+    }
+  }, { passive: true });
+  document.addEventListener('touchend', function(e){
+    if (e.touches.length < 2) twoFinger.active = false;
+  }, { passive: true });
 
   // init
   buildDots();
