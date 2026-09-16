@@ -157,6 +157,42 @@
     max-width: 22em;
     line-height:1.5;
   }
+  .intro-sub-solo{
+    font-family:'Fraunces', Georgia, serif;
+    font-weight: 500;
+    font-size: 6.2cqw;
+    color: var(--charcoal);
+    opacity: .92;
+    max-width: 22em;
+    line-height:1.4;
+  }
+  .mode-toggle{
+    display:flex;
+    gap: 6px;
+    background: rgba(42,38,32,.08);
+    border-radius: 999px;
+    padding: 4px;
+    margin-top: 2%;
+  }
+  .mode-btn{
+    font-family:'Inter', sans-serif;
+    font-weight:600;
+    font-size: 3.2cqw;
+    border:none;
+    background: transparent;
+    color: var(--charcoal);
+    opacity:.55;
+    padding: 2.2cqw 4.4cqw;
+    border-radius:999px;
+    cursor:pointer;
+    transition: background .2s ease, opacity .2s ease, color .2s ease;
+  }
+  .mode-btn.active{
+    background: var(--charcoal);
+    color: var(--paper);
+    opacity:1;
+  }
+
   .think-btn{
     margin-top: 8%;
     font-family:'Inter', sans-serif;
@@ -244,6 +280,13 @@
     font-family:'Fraunces', Georgia, serif;
     font-weight:600;
     font-size: 6.5cqw;
+  }
+  .reveal-number{
+    font-family:'Fraunces', Georgia, serif;
+    font-weight:600;
+    font-size: 13cqw;
+    margin-top: 4%;
+    color: var(--oxblood);
   }
   .guess-form{
     display:flex;
@@ -380,7 +423,8 @@
     revealed: {},
     revealTimers: {},
     guessedWrongOnce: false,
-    solved: false
+    solved: false,
+    mode: 'classic' // 'classic' or 'elmsley'
   };
 
   function makeCardNumbers(bit){
@@ -392,8 +436,14 @@
   }
   var cardsData = [0,1,2,3,4,5].map(makeCardNumbers);
 
+  function bitForPosition(pos){
+    // classic: position 1 -> bit0 (1s), position 6 -> bit5 (32s)
+    // elmsley: position 1 -> bit5 (32s), position 6 -> bit0 (1s) -- descending
+    return state.mode === 'elmsley' ? (TOTAL_CARDS - pos) : (pos - 1);
+  }
+
   function answerFor(cardNum, secret){
-    var bit = cardNum - 1;
+    var bit = bitForPosition(cardNum);
     return ((secret >> bit) & 1) === 1;
   }
 
@@ -426,12 +476,26 @@
 
   function renderIntro(){
     cardInner.innerHTML =
-      '<div class="intro-title">Think of a number</div>' +
-      '<div class="intro-sub">Pick anything from 1 to 52. Don\u2019t tell me &mdash; just hold it in mind.</div>' +
-      '<button class="think-btn" id="thinkBtn">Think of a number</button>' +
+      '<div class="intro-sub intro-sub-solo">I am going to think of a number between 1 and 52. Press begin to start.</div>' +
+      '<div class="mode-toggle" id="modeToggle">' +
+        '<button class="mode-btn" data-mode="classic" type="button">Classic</button>' +
+        '<button class="mode-btn" data-mode="elmsley" type="button">Elmsley</button>' +
+      '</div>' +
+      '<button class="think-btn" id="thinkBtn">BEGIN</button>' +
       '<div class="locked" id="lockedMsg">Locked in.</div>';
     setLede('');
     setHint('');
+
+    var toggle = document.getElementById('modeToggle');
+    var modeBtns = toggle.querySelectorAll('.mode-btn');
+    modeBtns.forEach(function(b){
+      b.classList.toggle('active', b.dataset.mode === state.mode);
+      b.addEventListener('click', function(){
+        state.mode = b.dataset.mode;
+        modeBtns.forEach(function(x){ x.classList.toggle('active', x.dataset.mode === state.mode); });
+      });
+    });
+
     var btn = document.getElementById('thinkBtn');
     btn.addEventListener('click', onThinkPressed);
   }
@@ -447,7 +511,7 @@
   }
 
   function renderNumberCard(cardNum){
-    var nums = cardsData[cardNum - 1];
+    var nums = cardsData[bitForPosition(cardNum)];
     var gridHtml = nums.map(function(n){ return '<span>' + n + '</span>'; }).join('');
     cardInner.innerHTML =
       '<div class="card-eyebrow">Card ' + cardNum + ' of ' + TOTAL_CARDS + '</div>' +
@@ -488,6 +552,15 @@
   }
 
   function renderGuess(){
+    if (state.mode === 'elmsley'){
+      cardInner.innerHTML =
+        '<div class="guess-title">Your number was</div>' +
+        '<div class="reveal-number">' + state.secret + '</div>';
+      setLede('Add up the first number on every card that said yes, then check it against this.');
+      setHint('Swipe right to review the cards.');
+      return;
+    }
+
     cardInner.innerHTML =
       '<div class="guess-title">What\u2019s the number?</div>' +
       '<div class="guess-form">' +
@@ -684,6 +757,7 @@
 
   // ---------- restart ----------
   function resetAll(){
+    var prevMode = state.mode || 'classic';
     Object.keys(state.revealTimers).forEach(function(k){ clearTimeout(state.revealTimers[k]); });
     state = {
       secret: null,
@@ -692,7 +766,8 @@
       revealTimers: {},
       guessedWrongOnce: false,
       solved: false,
-      gaveUp: false
+      gaveUp: false,
+      mode: prevMode
     };
     frontCard.style.transition = 'none';
     frontCard.style.transform = 'translateX(0) rotate(0)';
